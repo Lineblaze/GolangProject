@@ -1,0 +1,6 @@
+time="2022-11-14T17:02:23+03:00" level=info msg="router initializing" func="GolangProject/internal/app.NewApp()" file="app.go:28"
+time="2022-11-14T17:02:23+03:00" level=info msg="swagger docs initializing" func="GolangProject/internal/app.NewApp()" file="app.go:31"
+time="2022-11-14T17:02:23+03:00" level=info msg="Running application" func="main.main()" file="main.go:21"
+time="2022-11-14T17:02:23+03:00" level=info msg="start HTTP" func="GolangProject/internal/app.(*App).startHTTP()" file="app.go:47"
+time="2022-11-14T17:02:23+03:00" level=info msg="bind application to host: 127.0.0.1 and port: 8080" func="GolangProject/internal/app.(*App).startHTTP()" file="app.go:65"
+time="2022-11-14T17:02:23+03:00" level=fatal msg="listen tcp: address 127.0.0.1, 8080: missing port in address" func="GolangProject/internal/app.(*App).startHTTP()" file="app.go:69"
