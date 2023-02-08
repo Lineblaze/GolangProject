@@ -1,6 +1,7 @@
 package app
 
 import (
+	_ "GolangProject/docs"
 	"GolangProject/internal/config"
 	"GolangProject/pkg/logging"
 	"GolangProject/pkg/metric"
@@ -68,7 +69,7 @@ func (a *App) startHTTP() {
 	} else {
 		a.logger.Infof("bind application to host: %s and port: %s", a.cfg.Listen.BingIp, a.cfg.Listen.Port)
 		var err error
-		listener, err = net.Listen("tcp", fmt.Sprintf("%s, %s", a.cfg.Listen.BingIp, a.cfg.Listen.Port))
+		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%s", a.cfg.Listen.BingIp, a.cfg.Listen.Port))
 		if err != nil {
 			a.logger.Fatal(err)
 		}
@@ -78,9 +79,9 @@ func (a *App) startHTTP() {
 		AllowedMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodOptions, http.MethodDelete},
 		AllowedOrigins:     []string{"http://localhost:3000", "http://localhost:8080"},
 		AllowCredentials:   true,
-		AllowedHeaders:     []string{"Location", "Charset", "Access-Control-Allow-Original", "Context-Type"},
+		AllowedHeaders:     []string{"Location", "Charset", "Access-Control-Allow-Original", "Context-Type", "content-type", "Origin"},
 		OptionsPassthrough: true,
-		ExposedHeaders:     []string{"Location", "Charset"},
+		ExposedHeaders:     []string{"Location", "Authorization", "Content-Disposition"},
 		// Enable Debugging for testing, consider disabling in production
 		Debug: false,
 	})

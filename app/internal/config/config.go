@@ -10,8 +10,8 @@ type Config struct {
 	IsDebug       bool `env:"IS_DEBUG" env-default:"false"`
 	IsDevelopment bool `env:"IS_DEV" env-default:"false"`
 	Listen        struct {
-		Type       string `env:"LISTEN_TYPE" env-default:"sock" env-description:"'port' or 'sock''. If 'sock' then 'SOCKET_FILE' is required"`
-		BingIp     string `env:"BIND_IP" env-default:"127.0.0.1"`
+		Type       string `env:"LISTEN_TYPE" env-default:"port" env-description:"'port' or 'sock'. If 'sock' then 'SOCKET_FILE' is required"`
+		BingIp     string `env:"BIND_IP" env-default:"0.0.0.0"`
 		Port       string `env:"PORT" env-default:"10000"`
 		SocketFile string `env:"SOCKET_FILE" env-default:"app.sock"`
 	}

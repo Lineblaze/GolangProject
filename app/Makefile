@@ -1,4 +1,4 @@
-APP_BIN = build/app
+APP_BIN = app/build/app
 
 lint:
 	golangci-lint run
