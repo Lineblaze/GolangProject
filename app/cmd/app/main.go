@@ -1,24 +1,27 @@
 package main
 
 import (
+	"context"
+
 	"GolangProject/internal/app"
 	"GolangProject/internal/config"
 	"GolangProject/pkg/logging"
-	"log"
 )
 
 func main() {
-	log.Print("config initializing")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logging.Info(ctx, "config initializing")
 	cfg := config.GetConfig()
 
-	log.Print("logger initializing")
-	logging.Init(cfg.AppConfig.LogLevel)
-	logger := logging.GetLogger()
+	ctx = logging.ContextWithLogger(ctx, logging.NewLogger())
 
-	a, err := app.NewApp(cfg, logger)
+	a, err := app.NewApp(ctx, cfg)
 	if err != nil {
-		logger.Fatal(err)
+		logging.Fatal(ctx, err)
 	}
-	logger.Println("Running application")
-	a.Run()
+
+	logging.Info(ctx, "Running Application")
+	a.Run(ctx)
 }

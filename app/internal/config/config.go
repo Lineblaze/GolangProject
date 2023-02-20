@@ -1,20 +1,32 @@
 package config
 
 import (
+	"flag"
 	"github.com/ilyakaznacheev/cleanenv"
 	"log"
+	"os"
 	"sync"
+	"time"
 )
 
 type Config struct {
 	IsDebug       bool `env:"IS_DEBUG" env-default:"false"`
 	IsDevelopment bool `env:"IS_DEV" env-default:"false"`
-	Listen        struct {
-		Type       string `env:"LISTEN_TYPE" env-default:"port" env-description:"'port' or 'sock'. If 'sock' then 'SOCKET_FILE' is required"`
-		BingIp     string `env:"BIND_IP" env-default:"0.0.0.0"`
-		Port       string `env:"PORT" env-default:"10000"`
-		SocketFile string `env:"SOCKET_FILE" env-default:"app.sock"`
-	}
+	HTTP          struct {
+		IP           string        `yaml:"ip" env:"HTTP-IP"`
+		Port         int           `yaml:"port" env:"HTTP-PORT"`
+		ReadTimeout  time.Duration `yaml:"read-timeout" env:"HTTP-READ-TIMEOUT"`
+		WriteTimeout time.Duration `yaml:"write-timeout" env:"HTTP-WRITE-TIMEOUT"`
+		CORS         struct {
+			AllowedMethods     []string `yaml:"allowed_methods" env:"HTTP-CORS-ALLOWED-METHODS"`
+			AllowedOrigins     []string `yaml:"allowed_origins"`
+			AllowCredentials   bool     `yaml:"allow_credentials"`
+			AllowedHeaders     []string `yaml:"allowed_headers"`
+			OptionsPassthrough bool     `yaml:"options_passthrough"`
+			ExposedHeaders     []string `yaml:"exposed_headers"`
+			Debug              bool     `yaml:"debug"`
+		} `yaml:"cors"`
+	} `yaml:"http"`
 	AppConfig struct {
 		LogLevel  string `env:"LOG_LEVEL" env-default:"trace"`
 		AdminUser struct {
@@ -22,20 +34,43 @@ type Config struct {
 			Password string `env:"ADMIN-PASSWORD" env-default:"admin"`
 		}
 	}
+	PostgreSQL struct {
+		Username string `yaml:"username" env:"PSQL_USERNAME" env-required:"true"`
+		Password string `yaml:"password" env:"PSQL_PASSWORD" env-required:"true"`
+		Host     string `yaml:"host" env:"PSQL_HOST" env-required:"true"`
+		Port     string `yaml:"port" env:"PSQL_PORT" env-required:"true"`
+		Database string `yaml:"database" env:"PSQL_DATABASE" env-required:"true"`
+	}
 }
 
+const (
+	EnvConfigPathName  = "CONFIG-PATH"
+	FlagConfigPathName = "config"
+)
+
+var configPath string
 var instance *Config
 var once sync.Once
 
 func GetConfig() *Config {
-
 	once.Do(func() {
-		log.Print("gather config")
+		flag.StringVar(&configPath, FlagConfigPathName, "configs/config.local.yaml", "this is app config file")
+		flag.Parse()
+
+		log.Print("config init")
+
+		if configPath == "" {
+			configPath = os.Getenv(EnvConfigPathName)
+		}
+
+		if configPath == "" {
+			log.Fatal("config path is required")
+		}
 
 		instance = &Config{}
 
-		if err := cleanenv.ReadEnv(instance); err != nil {
-			helpText := "HelpText"
+		if err := cleanenv.ReadConfig(configPath, instance); err != nil {
+			helpText := "GolangProject - Production Service"
 			help, _ := cleanenv.GetDescription(instance, &helpText)
 			log.Print(help)
 			log.Fatal(err)

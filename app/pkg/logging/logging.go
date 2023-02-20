@@ -1,83 +1,156 @@
 package logging
 
 import (
+	"context"
 	"fmt"
-	"github.com/sirupsen/logrus"
-	"io"
-	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"runtime"
+	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
-// writerHook is a hook that writes logs of specified LogLevels to specified Writer
+var defLogger = NewLogger()
 
-type writeHook struct {
-	Writer    []io.Writer
-	LogLevels []logrus.Level
+type logger struct {
+	*logrus.Logger
 }
 
-// Fire will be called when some logging function is called with current hook
-// It will format log entry to string and write it to appropriate writer
-
-func (hook *writeHook) Fire(entry *logrus.Entry) error {
-	line, err := entry.String()
-	if err != nil {
-		return err
-	}
-	for _, w := range hook.Writer {
-		_, err = w.Write([]byte(line))
-	}
-	return err
+type Logger interface {
+	SetLevel(level logrus.Level)
+	GetLevel() logrus.Level
+	WithField(key string, value interface{}) *logrus.Entry
+	WithFields(fields logrus.Fields) *logrus.Entry
+	WithError(err error) *logrus.Entry
+	WithContext(ctx context.Context) *logrus.Entry
+	WithTime(t time.Time) *logrus.Entry
+	Tracef(format string, args ...interface{})
+	Debugf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	Warnf(format string, args ...interface{})
+	Warningf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+	Panicf(format string, args ...interface{})
+	Trace(args ...interface{})
+	Debug(args ...interface{})
+	Info(args ...interface{})
+	Print(args ...interface{})
+	Warning(args ...interface{})
+	Error(args ...interface{})
+	Fatal(args ...interface{})
+	Panic(args ...interface{})
 }
 
-// Levels define on which log levels this hook would trigger
-func (hook *writeHook) Levels() []logrus.Level {
-	return hook.LogLevels
+func GetLogger() Logger {
+	return defLogger
 }
 
-var e *logrus.Entry
-
-type Logger struct {
-	*logrus.Entry
-}
-
-func GetLogger() *Logger {
-	return &Logger{e}
-}
-func (l *Logger) LWithField(k string, v interface{}) *Logger {
-	return &Logger{l.WithField(k, v)}
-}
-
-func (l *Logger) LWithFields(fields map[string]interface{}) *Logger {
-	return &Logger{l.WithFields(fields)}
-}
-func Init(level string) {
-	logrusLevel, err := logrus.ParseLevel(level)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	l := logrus.New()
-	l.SetReportCaller(true)
-	l.Formatter = &logrus.TextFormatter{
-		CallerPrettyfier: func(frame *runtime.Frame) (function string, file string) {
-			filename := path.Base(frame.File)
-			return fmt.Sprintf("%s()", frame.Function), fmt.Sprintf("%s:%d", filename, frame.Line)
+func NewLogger() Logger {
+	logrusLogger := logrus.New()
+	logrusLogger.SetLevel(logrus.InfoLevel)
+	logrusLogger.Formatter = &logrus.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return fmt.Sprintf("%s:%d", filename, f.Line), fmt.Sprintf("%s()", f.Function)
 		},
 		DisableColors: false,
 		FullTimestamp: true,
 	}
+	logrusLogger.SetOutput(os.Stdout)
+	// TODO не работает, починить
+	logrusLogger.SetReportCaller(true)
 
-	l.SetOutput(ioutil.Discard) // Send all logs to nowhere by default
+	return &logger{
+		Logger: logrusLogger,
+	}
+}
 
-	l.AddHook(&writeHook{
-		Writer:    []io.Writer{os.Stdout},
-		LogLevels: logrus.AllLevels,
-	})
+func (l *logger) SetLevel(level logrus.Level) {
+	l.Logger.SetLevel(level)
+}
 
-	l.SetLevel(logrusLevel)
+func (l *logger) GetLevel() logrus.Level {
+	return l.Logger.GetLevel()
+}
 
-	e = logrus.NewEntry(l)
+func WithField(ctx context.Context, key string, value interface{}) *logrus.Entry {
+	return loggerFromContext(ctx).WithField(key, value)
+}
+
+func WithFields(ctx context.Context, fields logrus.Fields) *logrus.Entry {
+	return loggerFromContext(ctx).WithFields(fields)
+}
+
+func WithError(ctx context.Context, err error) *logrus.Entry {
+	return loggerFromContext(ctx).WithError(err)
+}
+
+func (l *logger) WithContext(ctx context.Context) *logrus.Entry {
+	return l.Logger.WithContext(ctx)
+}
+
+func WithTime(ctx context.Context, t time.Time) *logrus.Entry {
+	return loggerFromContext(ctx).WithTime(t)
+}
+
+func Tracef(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Tracef(format, args...)
+}
+
+func Debugf(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Debugf(format, args...)
+}
+
+func Infof(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Infof(format, args...)
+}
+
+func Warnf(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Warnf(format, args...)
+}
+
+func Warningf(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Warningf(format, args...)
+}
+
+func Errorf(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Errorf(format, args...)
+}
+
+func Fatalf(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Fatalf(format, args...)
+}
+
+func Panicf(ctx context.Context, format string, args ...interface{}) {
+	loggerFromContext(ctx).Panicf(format, args...)
+}
+
+func Trace(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Trace(args...)
+}
+
+func Debug(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Debug(args...)
+}
+
+func Info(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Info(args...)
+}
+
+func Warning(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Warning(args...)
+}
+
+func Error(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Error(args...)
+}
+
+func Fatal(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Fatal(args...)
+}
+
+func Panic(ctx context.Context, args ...interface{}) {
+	loggerFromContext(ctx).Panic(args...)
 }

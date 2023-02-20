@@ -55,8 +55,10 @@ CREATE TABLE public.product
     CONSTRAINT positive_price CHECK (price > 0),
     CONSTRAINT valid_rating CHECK (rating <= 5)
 );
+
+INSERT INTO public.category (name)
+VALUES ('купоны');
 INSERT INTO public.category (name)
 VALUES ('цифровые билеты');
-
 
 COMMIT;

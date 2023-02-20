@@ -1,15 +1,19 @@
 package model
 
+import (
+	"time"
+)
+
 type Product struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	ImageID       string `json:"image_id"`
-	Price         string `json:"price"`
-	CurrencyID    string `json:"currency_id"`
-	Rating        string `json:"rating"`
-	CategoryID    string `json:"category_id"`
-	Specification string `json:"specification"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	ID            string                 `mapstructure:"id"`
+	Name          string                 `mapstructure:"name"`
+	Description   string                 `mapstructure:"description"`
+	ImageID       *string                `mapstructure:"image_id"`
+	Price         uint64                 `mapstructure:"price"`
+	CurrencyID    uint32                 `mapstructure:"currency_id"`
+	Rating        uint32                 `mapstructure:"rating"`
+	CategoryID    uint32                 `mapstructure:"category_id"`
+	Specification map[string]interface{} `mapstructure:"specification"`
+	CreatedAt     time.Time              `mapstructure:"created_at"`
+	UpdatedAt     *time.Time             `mapstructure:"updated_at"`
 }

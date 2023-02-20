@@ -3,109 +3,115 @@ package app
 import (
 	_ "GolangProject/docs"
 	"GolangProject/internal/config"
+	"GolangProject/pkg/client/postgresql"
 	"GolangProject/pkg/logging"
 	"GolangProject/pkg/metric"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"net"
 	"net/http"
-	"os"
-	"path"
-	"path/filepath"
 	"time"
 )
 
 type App struct {
 	cfg        *config.Config
-	logger     *logging.Logger
 	router     *httprouter.Router
 	httpServer *http.Server
+	pgClient   *pgxpool.Pool
 }
 
-func NewApp(config *config.Config, logger *logging.Logger) (App, error) {
-	logger.Println("router initializing")
+func NewApp(ctx context.Context, config *config.Config) (App, error) {
+	logging.Info(ctx, "router initializing")
 	router := httprouter.New()
 
-	logger.Println("swagger docs initializing")
+	logging.Info(ctx, "swagger docs initializing")
 	router.Handler(http.MethodGet, "/swagger", http.RedirectHandler("/swagger/index.html", http.StatusMovedPermanently))
 	router.Handler(http.MethodGet, "/swagger/*any", httpSwagger.WrapHandler)
 
-	logger.Println("heartbeat metric initializing")
+	logging.Info(ctx, "heartbeat metric initializing")
 	metricHandler := metric.Handler{}
 	metricHandler.Register(router)
+
+	pgConfig := postgresql.NewPgConfig(
+		config.PostgreSQL.Username, config.PostgreSQL.Password,
+		config.PostgreSQL.Host, config.PostgreSQL.Port, config.PostgreSQL.Database,
+	)
+	pgClient, err := postgresql.NewClient(ctx, 5, time.Second*5, pgConfig)
+	if err != nil {
+		logging.GetLogger().Fatal(ctx, err)
+	}
+
 	return App{
-		cfg:    config,
-		logger: logger,
-		router: router,
+		cfg:      config,
+		router:   router,
+		pgClient: pgClient,
 	}, nil
 }
 
-func (a *App) Run() {
-	a.startHTTP()
+func (a *App) Run(ctx context.Context) error {
+	grp, ctx := errgroup.WithContext(ctx)
+	grp.Go(func() error {
+		return a.startHTTP(ctx)
+	})
+	logging.GetLogger(ctx).Info("application initialized and started")
+	return grp.Wait()
 }
 
-func (a *App) startHTTP() {
-	a.logger.Info("start HTTP")
+func (a *App) startHTTP(ctx context.Context) error {
+	logger := logging.WithFields(ctx, map[string]interface{}{
+		"IP":   a.cfg.HTTP.IP,
+		"Port": a.cfg.HTTP.Port,
+	})
+	logger.Info("HTTP Server initializing")
 
-	var listener net.Listener
-
-	if a.cfg.Listen.Type == config.ListenTypeSock {
-		appDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-		if err != nil {
-			a.logger.Fatal(err)
-		}
-		socketPath := path.Join(appDir, a.cfg.Listen.SocketFile)
-		a.logger.Infof("socket path: %s", socketPath)
-
-		a.logger.Info("create and listen unix socket")
-		listener, err = net.Listen("unix", socketPath)
-		if err != nil {
-			a.logger.Fatal(err)
-		}
-	} else {
-		a.logger.Infof("bind application to host: %s and port: %s", a.cfg.Listen.BingIp, a.cfg.Listen.Port)
-		var err error
-		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%s", a.cfg.Listen.BingIp, a.cfg.Listen.Port))
-		if err != nil {
-			a.logger.Fatal(err)
-		}
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", a.cfg.HTTP.IP, a.cfg.HTTP.Port))
+	if err != nil {
+		logger.WithError(err).Fatal("failed to create listener")
 	}
 
+	logger.WithFields(map[string]interface{}{
+		"AllowedMethods":     a.cfg.HTTP.CORS.AllowedMethods,
+		"AllowedOrigins":     a.cfg.HTTP.CORS.AllowedOrigins,
+		"AllowCredentials":   a.cfg.HTTP.CORS.AllowCredentials,
+		"AllowedHeaders":     a.cfg.HTTP.CORS.AllowedHeaders,
+		"OptionsPassthrough": a.cfg.HTTP.CORS.OptionsPassthrough,
+		"ExposedHeaders":     a.cfg.HTTP.CORS.ExposedHeaders,
+		"Debug":              a.cfg.HTTP.CORS.Debug,
+	})
 	c := cors.New(cors.Options{
-		AllowedMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodOptions, http.MethodDelete},
-		AllowedOrigins:     []string{"http://localhost:3000", "http://localhost:8080"},
-		AllowCredentials:   true,
-		AllowedHeaders:     []string{"Location", "Charset", "Access-Control-Allow-Original", "Context-Type", "content-type", "Origin"},
-		OptionsPassthrough: true,
-		ExposedHeaders:     []string{"Location", "Authorization", "Content-Disposition"},
-		// Enable Debugging for testing, consider disabling in production
-		Debug: false,
+		AllowedMethods:     a.cfg.HTTP.CORS.AllowedMethods,
+		AllowedOrigins:     a.cfg.HTTP.CORS.AllowedOrigins,
+		AllowCredentials:   a.cfg.HTTP.CORS.AllowCredentials,
+		AllowedHeaders:     a.cfg.HTTP.CORS.AllowedHeaders,
+		OptionsPassthrough: a.cfg.HTTP.CORS.OptionsPassthrough,
+		ExposedHeaders:     a.cfg.HTTP.CORS.ExposedHeaders,
+		Debug:              a.cfg.HTTP.CORS.Debug,
 	})
 
 	handler := c.Handler(a.router)
 
 	a.httpServer = &http.Server{
 		Handler:      handler,
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
+		WriteTimeout: a.cfg.HTTP.WriteTimeout,
+		ReadTimeout:  a.cfg.HTTP.ReadTimeout,
 	}
 
-	a.logger.Println("application completely initialized and started")
-
-	if err := a.httpServer.Serve(listener); err != nil {
+	if err = a.httpServer.Serve(listener); err != nil {
 		switch {
 		case errors.Is(err, http.ErrServerClosed):
-			a.logger.Warn("server shutdown")
+			logger.Warning("server shutdown")
 		default:
-			a.logger.Fatal(err)
+			logger.Fatal(err)
 		}
 	}
-	err := a.httpServer.Shutdown(context.Background())
+	err = a.httpServer.Shutdown(context.Background())
 	if err != nil {
-		a.logger.Fatal(err)
+		logger.Fatal(err)
 	}
+	return err
 }
